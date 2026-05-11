@@ -61,12 +61,23 @@
         }
 
         body.theme-forest {
-            --bg-image: url('https://images.unsplash.com/photo-1448375240586-882707db8855?q=80&w=2070&auto=format&fit=crop');
+            /* Daha belirgin ve etkileyici bir orman fotoğrafı */
+            --bg-image: url('https://images.unsplash.com/photo-1472214103451-9374bd1c798e?q=80&w=2070&auto=format&fit=crop');
             --accent-color: #10b981; /* Emerald */
             --accent-glow: rgba(16, 185, 129, 0.5);
             --break-color: #eab308;  /* Yellow */
             --break-glow: rgba(234, 179, 8, 0.5);
             --overlay-color: rgba(15, 25, 20, 0.75);
+        }
+
+        body.theme-custom {
+            /* Kullanıcının yüklediği fotoğraf buraya gelecek */
+            --bg-image: var(--user-bg-image, url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2000&auto=format&fit=crop'));
+            --accent-color: #a855f7; /* Purple */
+            --accent-glow: rgba(168, 85, 247, 0.5);
+            --break-color: #f97316;  /* Orange */
+            --break-glow: rgba(249, 115, 22, 0.5);
+            --overlay-color: rgba(10, 10, 15, 0.8);
         }
 
         body {
@@ -191,6 +202,12 @@
         <button class="theme-btn w-8 h-8 rounded-full bg-green-500/20 border-2 border-transparent text-green-400 hover:scale-110 transition-all flex items-center justify-center" data-theme="theme-forest" title="Mystic Forest">
             <i class="fas fa-tree"></i>
         </button>
+        <div class="w-px h-6 bg-white/20 mx-1 self-center"></div> <!-- Ayırıcı Çizgi -->
+        <button class="theme-btn w-8 h-8 rounded-full bg-purple-500/20 border-2 border-transparent text-purple-400 hover:scale-110 transition-all flex items-center justify-center" data-theme="theme-custom" title="Kendi Fotoğrafını Yükle">
+            <i class="fas fa-image"></i>
+        </button>
+        <!-- Gizli dosya yükleme inputu -->
+        <input type="file" id="bgInput" accept="image/*" class="hidden">
     </div>
 
     <div class="container mx-auto px-4 w-full relative z-10 flex flex-col items-center justify-center min-h-screen py-16">
@@ -383,6 +400,9 @@
         const btnCloseBreak = document.getElementById('btnCloseBreak');
         const quickBreakBtns = document.querySelectorAll('.quick-break-btn');
         const btnStartCustomBreak = document.getElementById('btnStartCustomBreak');
+        
+        // Custom Image Upload Input
+        const bgInput = document.getElementById('bgInput');
 
         // Circle Math
         const radius = progressCircle.r.baseVal.value;
@@ -397,6 +417,7 @@
         // State object
         let state = {
             theme: 'theme-sakura',
+            customBg: null, // Kullanıcının yüklediği fotoğrafı bellekte tutmak için
             mode: MODES.FOCUS,
             isRunning: false,
             
@@ -450,8 +471,19 @@
         }
 
         function applyTheme(themeName) {
+            // Eğer "Custom" seçildiyse ve fotoğraf yoksa, fotoğraf seçme penceresini aç
+            if (themeName === 'theme-custom' && !state.customBg) {
+                bgInput.click();
+                return;
+            }
+
             state.theme = themeName;
             bodyTheme.className = themeName; // Replaces classes safely
+            
+            // Eğer "Custom" aktifse CSS arka plan değişkenini kullanıcının fotoğrafı yap
+            if (themeName === 'theme-custom' && state.customBg) {
+                document.documentElement.style.setProperty('--user-bg-image', `url(${state.customBg})`);
+            }
             
             // Update active button state
             themeBtns.forEach(btn => {
@@ -469,8 +501,48 @@
 
         themeBtns.forEach(btn => {
             btn.addEventListener('click', () => {
+                // Eğer zaten "Custom" temasındaysa ve butona tekrar basarsa yeni fotoğraf yüklet
+                if (btn.dataset.theme === 'theme-custom' && state.theme === 'theme-custom') {
+                    bgInput.click();
+                    return;
+                }
                 applyTheme(btn.dataset.theme);
             });
+        });
+
+        // Kullanıcı kendi fotoğrafını seçtiğinde onu optimize et ve kaydet
+        bgInput.addEventListener('change', (e) => {
+            if(e.target.files && e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Tarayıcı hafızasını(localStorage) doldurmamak için görseli yeniden boyutlandırıp sıkıştırıyoruz
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 1920; // Maksimum genişlik 1080p
+                        let scaleSize = 1;
+                        if (img.width > MAX_WIDTH) {
+                            scaleSize = MAX_WIDTH / img.width;
+                        }
+                        canvas.width = img.width * scaleSize;
+                        canvas.height = img.height * scaleSize;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        
+                        // %60 kaliteyle JPEG'e çevir (Veriyi küçük tutmak için)
+                        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6); 
+                        state.customBg = compressedDataUrl;
+                        
+                        // Fotoğraf yüklendiği an temayı uygula
+                        applyTheme('theme-custom');
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(e.target.files[0]);
+                
+                // Aynı fotoğrafı tekrar seçebilmek için input'u temizle
+                e.target.value = '';
+            }
         });
 
         function formatTime(totalSeconds) {
